@@ -14,8 +14,6 @@ from langchain_core.runnables.history import RunnableWithMessageHistory
 from langchain_openai import ChatOpenAI, OpenAIEmbeddings
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
-llm = ChatOpenAI(model="gpt-3.5-turbo", temperature=0)
-
 
 ### Construct retriever ###
 loader = WebBaseLoader(
@@ -70,10 +68,8 @@ question_answer_chain = create_stuff_documents_chain(llm, qa_prompt)
 rag_chain = create_retrieval_chain(history_aware_retriever, question_answer_chain)
 
 
-### Statefully manage chat history ###
+### Stateful manage chat history ###
 store = {}
-
-
 def get_session_history(session_id: str) -> BaseChatMessageHistory:
     if session_id not in store:
         store[session_id] = ChatMessageHistory()
@@ -112,11 +108,30 @@ memory = ConversationSummaryBufferMemory(
 
 # Create a chain with this memory object and the model object created earlier.
 def get_chain():
-    chain = ConversationChain(
+    from langchain_openai import OpenAI
+    from langchain_core.prompts import PromptTemplate
+    from langchain.chains import LLMChain
+    from langchain.memory import ConversationBufferMemory
+
+    llm = OpenAI(temperature=0)
+    # Notice that "chat_history" is present in the prompt template
+    template = """You are a nice chatbot having a conversation with a human.
+
+    Previous conversation:
+    {chat_history}
+
+    New human question: {question}
+    Response:"""
+    prompt = PromptTemplate.from_template(template)
+    # Notice that we need to align the `memory_key`
+    memory = ConversationBufferMemory(memory_key="chat_history")
+    conversation = LLMChain(
         llm=llm,
+        prompt=prompt,
+        verbose=True,
         memory=memory
     )
-    return chain
+    return conversation
 
 # print(chain.invoke(
 #     {"input": "my name is David"},

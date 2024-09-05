@@ -1,4 +1,4 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, websockets, WebSocket
 from fastapi.responses import StreamingResponse
 import time
 
@@ -21,15 +21,24 @@ def generate_response(prompt: str):
 @app.post("/chat")
 async def chat(prompt: str):
     # Use the generator function to stream the response
-    chain = get_chain()
-    response = chain.invoke(
-        {"input": prompt},
-        config={
-            "configurable": {"session_id": "abc123"}
-        }
-    )['response']
+    conv = get_chain()
 
-    return StreamingResponse(response, media_type="text/plain")
+    while True:
+        # response = conv({"question": prompt})
+        response = conv.invoke(
+            {"question": prompt},
+            config={"configurable": {"session_id": "abc123"}},
+        )
+        return StreamingResponse(response['text'], media_type="text/plain")
+
+
+@app.websocket("/ws")
+async def websocket_endpoint(websocket: WebSocket):
+    await websocket.accept()
+    while True:
+        data = await websocket.receive_text()
+        await websocket.send_text(f"Message text was: {data}")
+
 
 import gradio as gr
 # Create the Gradio Interface
