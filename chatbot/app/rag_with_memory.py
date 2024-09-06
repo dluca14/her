@@ -7,10 +7,11 @@ from langchain.chains.combine_documents import create_stuff_documents_chain
 from langchain.chains.conversation.base import ConversationChain
 from langchain.memory import ConversationBufferMemory, ConversationSummaryBufferMemory
 from langchain_chroma import Chroma
-from langchain_community.chat_message_histories import ChatMessageHistory
+from langchain_community.chat_message_histories import ChatMessageHistory, RedisChatMessageHistory
 from langchain_community.document_loaders import WebBaseLoader
 from langchain_core.chat_history import BaseChatMessageHistory
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
+from langchain_core.runnables import RunnablePassthrough
 from langchain_core.runnables.history import RunnableWithMessageHistory
 from langchain_openai import ChatOpenAI, OpenAIEmbeddings
 from langchain_text_splitters import RecursiveCharacterTextSplitter
@@ -70,13 +71,39 @@ question_answer_chain = create_stuff_documents_chain(llm, qa_prompt)
 
 rag_chain = create_retrieval_chain(history_aware_retriever, question_answer_chain)
 
+REDIS_URL = 'redis://localhost:6379/0'
+def get_session_history(session_id) -> RedisChatMessageHistory:
+    return RedisChatMessageHistory(session_id, url=REDIS_URL)
 
+def summarize_messages(chain_input: dict, config: dict) -> bool:
+    # stored_messages = demo_ephemeral_chat_history.messages
+    session_history = get_session_history(config["session_id"])
+    stored_messages = session_history.messages
+    if len(stored_messages) == 0:
+        return False
+    summarization_prompt = ChatPromptTemplate.from_messages(
+        [
+            ("placeholder", "{chat_history}"),
+            (
+                "user",
+                "Distill the above chat messages into a single summary message. Include as many specific details as you can.",
+            ),
+        ]
+    )
+    summarization_chain = summarization_prompt | llm
+    summary_message = summarization_chain.invoke({"chat_history": stored_messages})
+    # demo_ephemeral_chat_history.clear()
+    # demo_ephemeral_chat_history.add_message(summary_message)
+    session_history.clear()
+    session_history.add_message(summary_message)
+
+    return True
 ### Stateful manage chat history ###
-store = {}
-def get_session_history(session_id: str) -> BaseChatMessageHistory:
-    if session_id not in store:
-        store[session_id] = ChatMessageHistory()
-    return store[session_id]
+# store = {}
+# def get_session_history(session_id: str) -> BaseChatMessageHistory:
+#     if session_id not in store:
+#         store[session_id] = ChatMessageHistory()
+#     return store[session_id]
 
 
 conversational_rag_chain = RunnableWithMessageHistory(
@@ -87,10 +114,39 @@ conversational_rag_chain = RunnableWithMessageHistory(
     output_messages_key="answer",
 )
 
-response = conversational_rag_chain.invoke(
-    input = {"input": "What is the agent's goal in reinforcement learning?"},
-    config = {"configurable": {"user_id": "user1", "session_id": "session1"}},
+chain_with_summarization = (
+    # RunnablePassthrough.assign(messages_summarized=summarize_messages)
+        RunnablePassthrough.assign(
+            messages_summarized=lambda chain_input, config: summarize_messages(chain_input, config["configurable"])
+        )
+        | conversational_rag_chain
 )
-print(f'QUESTION: {response["input"]}')
-print(f'CONTEXT: {response['context']}')
-print(f'ANSWER: {response['answer']}')
+
+def run_chat():
+    print("Hello, I am your friendly chatbot. Let's chat!")
+    print("Type 'STOP' to end the conversation, 'HISTORY' to view chat history, or 'CLEAR' to clear the chat history.")
+    while True:
+        user_input = input('User: ')
+        if user_input.strip().upper() == 'STOP':
+            print('ChatGPT: Goodbye! It was a pleasure chatting with you.')
+            break
+
+        user_inp = {'input': user_input}
+        response = chain_with_summarization.invoke(
+            input=user_inp,
+            config={"configurable": {"user_id": "user1", "session_id": "session1"}},
+        )
+        print('ChatGPT:', response['answer'])
+        # print('ChatGPT:', response['context'])
+
+
+if __name__ == '__main__':
+    run_chat()
+
+    # response = conversational_rag_chain.invoke(
+    #     input = {"input": "What is the agent's goal in reinforcement learning?"},
+    #     config = {"configurable": {"user_id": "user1", "session_id": "session1"}},
+    # )
+    # print(f'QUESTION: {response["input"]}')
+    # print(f'CONTEXT: {response['context']}')
+    # print(f'ANSWER: {response['answer']}')
