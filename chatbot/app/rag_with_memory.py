@@ -1,6 +1,7 @@
 from itertools import chain
 
 import bs4
+import dotenv
 from langchain.chains import create_history_aware_retriever, create_retrieval_chain
 from langchain.chains.combine_documents import create_stuff_documents_chain
 from langchain.chains.conversation.base import ConversationChain
@@ -14,6 +15,10 @@ from langchain_core.runnables.history import RunnableWithMessageHistory
 from langchain_openai import ChatOpenAI, OpenAIEmbeddings
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
+
+dotenv.load_dotenv()
+
+llm = ChatOpenAI(model="gpt-3.5-turbo")
 
 ### Construct retriever ###
 loader = WebBaseLoader(
@@ -31,7 +36,6 @@ splits = text_splitter.split_documents(docs)
 vectorstore = Chroma.from_documents(documents=splits, embedding=OpenAIEmbeddings())
 retriever = vectorstore.as_retriever()
 
-
 ### Contextualize question ###
 contextualize_q_system_prompt = """Given a chat history and the latest user question \
 which might reference context in the chat history, formulate a standalone question \
@@ -47,7 +51,6 @@ contextualize_q_prompt = ChatPromptTemplate.from_messages(
 history_aware_retriever = create_history_aware_retriever(
     llm, retriever, contextualize_q_prompt
 )
-
 
 ### Answer question ###
 qa_system_prompt = """You are an assistant for question-answering tasks. \
@@ -84,62 +87,10 @@ conversational_rag_chain = RunnableWithMessageHistory(
     output_messages_key="answer",
 )
 
-
-# print(conversational_rag_chain.invoke(
-#     {"input": "What is Task Decomposition?"},
-#     config={
-#         "configurable": {"session_id": "abc123"}
-#     },  # constructs a key "abc123" in `store`.
-# )["answer"])
-#
-# print(conversational_rag_chain.invoke(
-#     {"input": "What are common ways of doing it?"},
-#     config={"configurable": {"session_id": "abc123"}},
-# )["answer"])
-
-
-""" Using simple chain """
-# Create a memory object which will store the conversation history.
-# memory = ConversationBufferMemory()
-memory = ConversationSummaryBufferMemory(
-    llm=llm,
-    max_token_limit=650
+response = conversational_rag_chain.invoke(
+    input = {"input": "What is the agent's goal in reinforcement learning?"},
+    config = {"configurable": {"user_id": "user1", "session_id": "session1"}},
 )
-
-# Create a chain with this memory object and the model object created earlier.
-def get_chain():
-    from langchain_openai import OpenAI
-    from langchain_core.prompts import PromptTemplate
-    from langchain.chains import LLMChain
-    from langchain.memory import ConversationBufferMemory
-
-    llm = OpenAI(temperature=0)
-    # Notice that "chat_history" is present in the prompt template
-    template = """You are a nice chatbot having a conversation with a human.
-
-    Previous conversation:
-    {chat_history}
-
-    New human question: {question}
-    Response:"""
-    prompt = PromptTemplate.from_template(template)
-    # Notice that we need to align the `memory_key`
-    memory = ConversationBufferMemory(memory_key="chat_history")
-    conversation = LLMChain(
-        llm=llm,
-        prompt=prompt,
-        verbose=True,
-        memory=memory
-    )
-    return conversation
-
-# print(chain.invoke(
-#     {"input": "my name is David"},
-#     config={
-#         "configurable": {"session_id": "abc123"}
-#     },  # constructs a key "abc123" in `store`.
-# )['response'])
-# print(chain.invoke(
-#     {"input": "what is my name?"},
-#     config={"configurable": {"session_id": "abc123"}},
-# ))
+print(f'QUESTION: {response["input"]}')
+print(f'CONTEXT: {response['context']}')
+print(f'ANSWER: {response['answer']}')
