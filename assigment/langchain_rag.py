@@ -160,9 +160,10 @@ if __name__ == "__main__":
     Plan: Admit to ICU, start antibiotics and fluids.
     '''
 
+    ''' There are 2 types of chains that can be used to get the answer '''
     # rag_chain = get_chain()
     # for chunk in rag_chain.stream(input):
-    #     print(chunk, end="", flush=True)
+    #     print(f'SUMMARY: {chunk}', end="", flush=True)
 
     rag_chain = get_chain_with_sources()
     response = rag_chain.invoke({'input': input})
