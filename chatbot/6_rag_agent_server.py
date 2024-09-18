@@ -87,5 +87,19 @@ add_routes(
 
 if __name__ == "__main__":
     import uvicorn
-
     uvicorn.run(app, host="localhost", port=8000)
+
+    # from langserve import RemoteRunnable
+    #
+    # remote_chain = RemoteRunnable("http://localhost:8000/chain/")
+    # remote_chain.invoke({"language": "italian", "text": "hi"})
+# ----------------------------------------------------------------------------------------------------------------------
+#     print(agent_executor.invoke({"input": "what is my name ?",
+#                                  "chat_history": ["Hi, my name is David", "Nice to meet you"]}))
+
+    # config = {"configurable": {"thread_id": "abc123"}}
+    # print(agent_executor.invoke({"messages": [HumanMessage(content='my name is David')]},
+    #                             config=config))
+    # print(agent_executor.invoke({"messages": [HumanMessage(content="what is my name ?")]},
+    #                             config=config)['messages'][-1].content)
+
